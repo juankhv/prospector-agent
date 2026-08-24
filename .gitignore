@@ -1,0 +1,19 @@
+# Entorno virtual de Python
+venv/
+__pycache__/
+*.pyc
+
+# Credenciales y variables de entorno (NUNCA subir esto a GitHub)
+.env
+*.env
+env-vars*.yaml
+*service-account*.json
+*credentials*.json
+prospector-agent-*.json
+sheets_credentials_oneline.txt
+
+# Archivos del sistema operativo
+.DS_Store
+.claude/
+*.adk/
+*.db

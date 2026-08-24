@@ -1,0 +1,5 @@
+google-adk
+requests
+msal
+gspread
+google-auth
