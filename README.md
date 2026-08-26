@@ -72,12 +72,12 @@ reasons about which tool to call next based on the instructions in
 3. **Draft** a personalized email (Gemini), citing the research and a
    relevant Aptitude client case study by industry.
 4. **Verify** the draft (Gemini) — checks fidelity to the research, correct
-   case study, word limit, and domain plausibility. Rejects up to 3 times
+   case study, word limit, and domain plausibility. Rejects up to 2 times
    with feedback fed back into a redraft.
 5. **Prior-contact check** (has this company been emailed before?).
 6. If approved: **send** via Microsoft Graph (Outlook) and **log** to the
    Google Sheets CRM substitute.
-7. If rejected 3 times, excluded, or already contacted: **escalate** —
+7. If rejected 2 times, excluded, or already contacted: **escalate** —
    notify the user by email and persist the case to a "Pending Approval"
    sheet, so it can be approved manually or retried automatically later.
 
@@ -166,7 +166,7 @@ reasoning, not just the output.
 adk deploy cloud_run --project=<your-project> --region=us-central1 \
   --service_name=prospector-agent --app_name=prospector_agent --with_ui \
   prospector_agent -- --env-vars-file=env-vars.yaml \
-  --allow-unauthenticated --clear-base-image
+  --allow-unauthenticated --clear-base-image --timeout=1800
 ```
 
 `requirements.txt` must exist both at the repo root and inside
@@ -206,7 +206,7 @@ Repeat for each of the 5 functions in `cloud_function/main.py`
   can evolve without breaking existing rows.
 - **Human-in-the-loop, scoped narrowly**: the only points where the agent
   pauses for a person are contact exclusions, already-contacted companies,
-  and emails rejected three times by the verifier — everything else
+  and emails rejected twice by the verifier — everything else
   proceeds autonomously. Rejected leads get one automatic retry after 7
   days before they're left for manual review permanently.
 - **New Projects Only compliance**: this codebase and its prompts were
