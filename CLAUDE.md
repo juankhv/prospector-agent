@@ -200,6 +200,46 @@ confirmar si este ajuste al texto de ejemplo llegó a aplicarse (revisar
 `Select-String -Pattern "Prospect 1"` en agent.py; si no aparece, seguía
 sugiriendo 3 al momento de este corte de sesión).
 
+## Segundo bug de timeout, corregido el 27 de agosto de 2026
+
+**Síntoma**: aunque el fix del 25 de agosto funcionó (confirmado: la
+corrida del 26 de agosto completó envíos con éxito), la corrida automática
+del 27 de agosto a las 12pm falló de nuevo, esta vez con un error distinto:
+`Error creando sesión: ... Read timed out. (read timeout=60)` — NO era un
+504 de Cloud Run, era el timeout de la PRIMERA llamada HTTP (crear sesión),
+que seguía en 60 segundos.
+
+**Causa raíz**: 60 segundos era insuficiente para cubrir un arranque en
+frío lento de Cloud Run en algunos días — el servicio, si no tuvo tráfico
+reciente, puede tardar más de 60s en levantar el contenedor y responder al
+primer POST de creación de sesión. Confirmado con una llamada directa
+aislada (`requests.post` a mano) que, una vez la instancia ya estaba
+"caliente", respondía en ~15s — pero un arranque frío real puede superar
+holgadamente los 60s.
+
+**Corrección aplicada**: subido el timeout de la llamada de creación de
+sesión de 60 a 180 segundos, en las 5 funciones de `cloud_function/main.py`
+(trigger_prospector, trigger_seguimiento, trigger_reintento_rechazados,
+trigger_revision_respuestas, trigger_revision_aprobaciones). Las 5 Cloud
+Functions fueron redesplegadas individualmente (mismo comando
+`gcloud functions deploy` de siempre, solo cambia `--entry-point`).
+
+**Efecto colateral del diagnóstico**: al disparar manualmente
+`gcloud scheduler jobs run prospeccion-diaria` para probar, se generó una
+corrida real ADICIONAL ese mismo día (10 correos reales a prospectos
+reales, confirmados en "Leads Enviados" entre las 22:34–22:45 UTC del
+27-ago) — fuera del horario normal de las 12pm. Esto es esperado: correr
+ese comando siempre dispara el proceso real completo, no hay modo
+"simulación" para ese comando específico. Tenerlo en cuenta antes de
+volver a disparar manualmente un job de producción solo para diagnosticar
+— considerar si hace falta de verdad o si alcanza con revisar logs.
+
+**PENDIENTE DE CONFIRMAR (actualizado)**: la corrida del 28 de agosto
+(viernes, día hábil) es la primera prueba real de este segundo fix —
+revisar logs de todas las Cloud Functions y la hoja "Leads Enviados" real
+después de cada horario programado (7am, 8:30am, 12pm, 2pm, 4pm) para
+confirmar que ninguna vuelve a fallar por timeout de ningún tipo.
+
 ## Google Sheets: estructura de pestañas (PRODUCCIÓN real, español)
 
 - **"Leads Enviados"**: `Date, Name, Last Name, Position, Company,
@@ -319,12 +359,13 @@ en una conversación aparte, con todo este contexto ya pasado ahí.
 
 ## Pendientes reales para el submission
 
-1. **Confirmar que el fix de timeout funcionó** — revisar la corrida del
-   26 de agosto (próximo día hábil) después de las 12pm
+1. **Confirmar que el segundo fix de timeout funcionó** — revisar la
+   corrida del 28 de agosto (viernes) en TODOS los horarios (7am, 8:30am,
+   12pm, 2pm, 4pm), no solo el de las 12pm
 2. **Grabar el video demo** (guion ya definido)
 3. Terminar el resto del formulario de Devpost (teammates, disclosures)
-4. Monitorear producción real durante la primera semana completa con el
-   fix aplicado
+4. Monitorear producción real durante la primera semana completa con
+   ambos fixes de timeout aplicados
 
 ## Fuera de alcance a propósito
 

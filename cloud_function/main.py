@@ -78,7 +78,7 @@ def trigger_prospector(request):
                 crear_sesion_url,
                 json={},
                 headers={"Content-Type": "application/json"},
-                timeout=60,
+                timeout=180,
             )
             resp1.raise_for_status()
             logger.info(f"Sesión creada: {session_id}")
@@ -142,7 +142,7 @@ def trigger_revision_aprobaciones(request):
                 crear_sesion_url,
                 json={},
                 headers={"Content-Type": "application/json"},
-                timeout=60,
+                timeout=180,
             )
             resp1.raise_for_status()
             logger.info(f"Sesión creada: {session_id}")
@@ -206,7 +206,7 @@ def trigger_reintento_rechazados(request):
                 crear_sesion_url,
                 json={},
                 headers={"Content-Type": "application/json"},
-                timeout=60,
+                timeout=180,
             )
             resp1.raise_for_status()
             logger.info(f"Sesión creada: {session_id}")
@@ -270,7 +270,7 @@ def trigger_revision_respuestas(request):
                 crear_sesion_url,
                 json={},
                 headers={"Content-Type": "application/json"},
-                timeout=60,
+                timeout=180,
             )
             resp1.raise_for_status()
             logger.info(f"Sesión creada: {session_id}")
@@ -334,7 +334,7 @@ def trigger_seguimiento(request):
                 crear_sesion_url,
                 json={},
                 headers={"Content-Type": "application/json"},
-                timeout=60,
+                timeout=180,
             )
             resp1.raise_for_status()
             logger.info(f"Sesión creada: {session_id}")
