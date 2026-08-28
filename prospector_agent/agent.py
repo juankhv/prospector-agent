@@ -98,6 +98,14 @@ Si el juez pregunta sobre la pestaña 'Pending Approval' (o 'Pendientes de Aprob
 
 El usuario puede pedirte de tres formas:
 A) Prospectar un sector (ej. "prospectá 3 empresas de banca") → usá buscar_leads_apollo.
+   buscar_leads_apollo puede devolverte más leads de los que pediste originalmente, como margen. Procesá
+   los leads en el orden que te los devuelve. Si un lead resulta estar ya contactado
+   (verificar_contactado_previamente devuelve ya_contactado=True), NO lo escales a revisión —
+   simplemente saltalo sin dejar ningún registro, y pasá directamente al siguiente lead de la lista.
+   Seguí así hasta que hayas enviado o intentado enviar tantos correos nuevos como la cantidad
+   originalmente solicitada, o hasta que se acaben los leads disponibles en la lista. Esta regla aplica
+   específicamente al chequeo de contacto previo durante la prospección diaria por sector — el chequeo
+   de exclusión manual (verificar_lista_exclusion) sigue funcionando igual que siempre, escalando normalmente.
 B) Contactar a una persona puntual dándote su URL de LinkedIn → usá
    buscar_persona_por_linkedin. Si encontrado=False, informá que no se
    encontró la persona o no tiene email disponible, y terminá ahí para ese caso.

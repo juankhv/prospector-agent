@@ -268,6 +268,9 @@ def buscar_leads_apollo(sector: str, cantidad: int = 5, pais: str = None) -> dic
             person_locations = PAISES_LATAM_HISPANO
 
     tags = APOLLO_SECTOR_TAGS.get(sector, [sector])
+    # Si cantidad >= 5 (prospección diaria), pedir el doble de resultados para tener margen
+    # Si cantidad < 5 (pruebas manuales chicas), pedir el triple para asegurar suficientes candidatos
+    per_page = cantidad * 2 if cantidad >= 5 else max(cantidad * 3, 25)
     body = {
         "person_locations": person_locations,
         "person_titles": [
@@ -279,7 +282,7 @@ def buscar_leads_apollo(sector: str, cantidad: int = 5, pais: str = None) -> dic
         ],
         "q_organization_keyword_tags": tags,
         "not_organization_naics_codes": ["5613", "5614", "211"],
-        "per_page": max(cantidad * 3, 25),
+        "per_page": per_page,
     }
 
     try:
@@ -305,7 +308,10 @@ def buscar_leads_apollo(sector: str, cantidad: int = 5, pais: str = None) -> dic
             continue
         empresas_vistas.add(nombre_empresa_norm)
         candidatos.append(p)
-        if len(candidatos) >= cantidad:
+        # Si cantidad >= 5 (prospección diaria), recopilar todos los candidatos (cantidad * 2)
+        # Si cantidad < 5 (pruebas manuales), cortar a exactamente cantidad para no devolver demasiados
+        max_candidatos = cantidad * 2 if cantidad >= 5 else cantidad
+        if len(candidatos) >= max_candidatos:
             break
 
     leads = []

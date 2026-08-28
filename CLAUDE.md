@@ -200,6 +200,39 @@ confirmar si este ajuste al texto de ejemplo llegó a aplicarse (revisar
 `Select-String -Pattern "Prospect 1"` en agent.py; si no aparece, seguía
 sugiriendo 3 al momento de este corte de sesión).
 
+## Margen de leads y salto automático de duplicados (28 de agosto de 2026)
+
+**Problema real encontrado**: el 28 de agosto, `prospeccion-diaria` corrió
+sin ningún error de timeout (confirmando que los dos fixes anteriores
+funcionan), pero Apollo devolvió las mismas dos empresas que ya se habían
+contactado el día anterior (durante pruebas manuales de diagnóstico del
+bug de timeout). El chequeo de contacto-previo las bloqueó correctamente
+—comportamiento esperado— pero el agente simplemente las escaló a
+"Pendientes de Aprobación" y se detuvo ahí, sin buscar otros candidatos.
+Resultado: cero correos nuevos ese día, aunque el sistema funcionó
+"correctamente" según su diseño original.
+
+**Corrección aplicada**:
+1. `buscar_leads_apollo` ahora pide margen extra a Apollo cuando
+   `cantidad >= 5` (el caso real de prospección diaria, no las pruebas
+   manuales chicas): `per_page = cantidad * 2` (con mínimo `cantidad * 3`
+   o 25 para cantidades chicas), y devuelve hasta `cantidad * 2`
+   candidatos filtrados (ya no corta la lista a `cantidad`) — el agente
+   recibe más opciones de las que necesita.
+2. En las instrucciones de `agent.py`, durante la prospección diaria por
+   sector: si un lead resulta ya contactado, el agente ya NO lo escala a
+   revisión — lo salta silenciosamente, sin ningún registro, y pasa al
+   siguiente candidato de la lista extra, hasta completar la cuota
+   original o agotar los candidatos disponibles. Esta regla es específica
+   del chequeo de contacto-previo durante prospección diaria — la
+   exclusión manual (`verificar_lista_exclusion`) sigue escalando
+   normalmente, sin cambios.
+
+**Efecto esperado**: los días en que Apollo repite resultados ya
+contactados, el agente ahora debería seguir intentando con el resto de
+la lista extra en vez de terminar el día con cero correos nuevos.
+**PENDIENTE DE CONFIRMAR** en la próxima corrida real de `prospeccion-diaria`.
+
 ## Segundo bug de timeout, corregido el 27 de agosto de 2026
 
 **Síntoma**: aunque el fix del 25 de agosto funcionó (confirmado: la
