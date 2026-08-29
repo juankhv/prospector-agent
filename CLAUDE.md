@@ -233,6 +233,106 @@ contactados, el agente ahora debería seguir intentando con el resto de
 la lista extra en vez de terminar el día con cero correos nuevos.
 **PENDIENTE DE CONFIRMAR** en la próxima corrida real de `prospeccion-diaria`.
 
+## Bug crítico corregido: producción ofrecía modo de prueba (28 de agosto)
+
+**Síntoma**: al abrir la URL de PRODUCCIÓN real (sin "-demo") y saludar al
+agente, este respondió presentándose como si fuera la instancia de demo —
+"Como este es un entorno de demo... facilítame tu dirección de correo para
+activar el Modo de Prueba". Si el usuario hubiera dado su email en esa
+sesión, todos los correos de esa sesión se habrían redirigido ahí en vez
+de a prospectos reales, silenciosamente.
+
+**Causa raíz**: cuando el modo de prueba se diseñó originalmente (antes de
+existir la instancia de demo separada), las instrucciones de `agent.py`
+incluían un fallback "Si NO existe DEMO_ONLY_INSTANCE, seguí el
+comportamiento normal: si el usuario saluda o menciona
+'test'/'demo'/'probar', igual ofrecé modo de prueba" — ese fallback nunca
+se quitó al construir la instancia de demo dedicada, así que producción
+real seguía pudiendo activar modo de prueba con solo un saludo.
+
+**Corrección aplicada**: se reestructuró por completo la sección de
+bienvenida en `agent.py` en 3 bloques SIN texto compartido entre ellos:
+- **Bloque 1** ("Reglas que aplican SIEMPRE"): idioma de respuesta
+  auto-detectado, reglas de escalamiento (aprobar_y_enviar /
+  marcar_enviado_en_aprobaciones — disponibles en AMBAS instancias, es
+  funcionalidad de negocio real, no solo para jueces), y la nueva sección
+  de prospección diaria bajo demanda (ver abajo).
+- **Bloque 2** ("Bienvenida y funcionalidad de demo — SOLO si
+  DEMO_ONLY_INSTANCE='true'"): todo el contenido específico de jueces
+  (presentación, activar_modo_prueba, país, Sheets de solo lectura,
+  preguntas sobre el proyecto, explicación de pestañas).
+- **Bloque 3** ("Comportamiento de producción real — si
+  DEMO_ONLY_INSTANCE NO existe"): explícito y sin ambigüedad — "NUNCA
+  ofrezcas activar un modo de prueba, nunca pidas el email de quien te
+  escribe para redirigir correos, y nunca menciones 'modo de prueba' de
+  ninguna forma".
+
+**Si en el futuro se edita esta sección de bienvenida, mantener los 3
+bloques completamente separados — NUNCA volver a un condicional que
+comparta texto entre demo y producción, ese fue exactamente el origen de
+este bug.**
+
+## Prospección diaria bajo demanda (28 de agosto)
+
+Nueva capacidad conversacional en `agent.py` (Bloque 1, aplica a ambas
+instancias): el usuario puede pedirle al agente directamente "hacé una
+prospección diaria" (sin especificar sector → reparte 10 leads entre los
+4 sectores rotativos, ~2-3 por sector) o "hacé una prospección diaria de
+banca/TI/etc." (sector específico → 10 leads de ese sector). Ejecuta el
+mismo flujo completo que la corrida automática de las 12pm (exclusión,
+investigación, redacción, verificación, contacto previo, envío/escalado),
+aprovechando el margen extra de `buscar_leads_apollo` y saltando
+duplicados sin escalarlos, igual que la corrida programada.
+
+## Bug de seguridad crítico: producción ofrecía modo de prueba (28 de agosto de 2026)
+
+**Síntoma**: al saludar al agente en la URL de PRODUCCIÓN real (sin
+"-demo"), respondió presentándose como si fuera la instancia de demo,
+pidiendo el email del usuario para "activar el modo de prueba" — un
+comportamiento que solo debería existir en `prospector-agent-demo`.
+
+**Causa raíz**: cuando se construyó el modo de prueba dinámico (antes de
+crear la instancia de demo dedicada), las instrucciones de `agent.py`
+tenían una rama de fallback: "Si NO existe DEMO_ONLY_INSTANCE, seguí el
+comportamiento normal: si el usuario saluda sin instrucción específica o
+menciona 'test'/'demo'/'judge'/etc., ofrecé modo de prueba igual". Esa
+rama nunca se quitó al construir la instancia de demo separada, así que
+CUALQUIERA que abriera la URL de producción y saludara (o usara esas
+palabras clave) podía activar el modo de prueba en producción real — y
+si daba su email, todos los correos de esa sesión se habrían redirigido
+ahí en vez de ir a prospectos reales, silenciosamente.
+
+**Impacto real**: se confirmó con el usuario que, en el incidente que
+destapó el bug, nunca llegó a darse un email — ningún correo real se vio
+afectado. Pero el bug estuvo latente desde que se creó la instancia de
+demo (22 de agosto) hasta esta corrección (28 de agosto).
+
+**Corrección aplicada**: `agent.py` se reestructuró en 3 bloques
+completamente separados, sin texto compartido entre ellos:
+- **Bloque 1** ("Reglas que aplican SIEMPRE"): idioma de respuesta
+  auto-detectado, y — importante — `aprobar_y_enviar`/
+  `marcar_enviado_en_aprobaciones` para casos de exclusión/contacto-
+  previo/rechazo (decisión explícita: esta funcionalidad de aprobación
+  conversacional SÍ debe estar disponible también en producción real,
+  no solo en demo).
+- **Bloque 2** ("Bienvenida y funcionalidad de demo — SOLO si
+  DEMO_ONLY_INSTANCE='true'"): todo el contenido específico de jueces
+  (presentación, activar_modo_prueba, país, Sheets de solo lectura,
+  preguntas sobre el proyecto, explicación de pestañas). Sin cambios de
+  contenido, solo reubicado.
+- **Bloque 3** ("Comportamiento de producción real — si
+  DEMO_ONLY_INSTANCE NO existe"): explícito y sin ambigüedad — "NUNCA
+  ofrezcas activar un modo de prueba, nunca pidas el email de quien te
+  escribe para redirigir correos, y nunca menciones 'modo de prueba' de
+  ninguna forma".
+
+Ambas instancias redesplegadas. **Lección para el futuro**: cuando se
+divide una funcionalidad entre dos instancias (producción/demo), revisar
+TODAS las ramas condicionales del código/instrucciones para confirmar que
+ninguna quedó con comportamiento compartido no intencional — este bug
+existió por 6 días sin que nadie lo notara, porque nadie había abierto la
+URL de producción y saludado sin dar una instrucción de tarea específica.
+
 ## Segundo bug de timeout, corregido el 27 de agosto de 2026
 
 **Síntoma**: aunque el fix del 25 de agosto funcionó (confirmado: la
