@@ -38,9 +38,10 @@ prospector-agent/
 ├── prospector_agent/
 │   ├── __init__.py       # required by ADK, do not touch
 │   ├── agent.py            # orchestrator: instructions + tool wiring
-│   └── tools.py             # 18 tools: lead search, research, drafting,
+│   └── tools.py             # 20 tools: lead search, research, drafting,
 │                             # verification, sending, CRM, follow-up,
-│                             # retries, inbox monitoring, reporting
+│                             # retries, inbox monitoring, reporting,
+│                             # on-demand daily prospecting, test-mode approvals
 ├── cloud_function/
 │   ├── main.py              # 5 Cloud Functions that trigger the agent
 │   │                         # on a schedule (Cloud Scheduler can't chain
@@ -55,7 +56,7 @@ prospector-agent/
 
 ## How it works
 
-A single orchestrator agent (`agente_prospeccion`) with 18 tools. You (or a
+A single orchestrator agent (`agente_prospeccion`) with 20 tools. You (or a
 scheduled job) send it a natural-language instruction — *"Prospect 5
 companies in the banking sector"*, *"Follow up on leads that haven't
 responded"*, *"Review pending approvals"* — and Gemini decides the entire
@@ -91,8 +92,12 @@ reasons about which tool to call next based on the instructions in
 | 2:00 PM daily | Follow-up | Sends a 2nd/3rd touch to leads that haven't responded, 5 days apart, max 3 attempts |
 | 4:00 PM daily | Pending approvals | Sends any human-approved emails waiting in the "Pending Approval" sheet |
 
-The user can also trigger any of these on demand through the chat interface,
-or ask for a status report ("give me a report") that summarizes lead counts
+The user can also trigger any of these on demand through the chat interface.
+For new prospecting specifically, just ask — 'run a daily prospecting round'
+splits 10 leads across all four rotating sectors, or specify one directly
+('run a daily prospecting round for banking') to target just that sector.
+Either way it's the exact same chain as the scheduled 12 PM job. You can
+also ask for a status report ('give me a report') that summarizes lead counts
 by outcome, with an optional follow-up to email that report to any address.
 
 ## CRM: Google Sheets today, HubSpot integration planned
