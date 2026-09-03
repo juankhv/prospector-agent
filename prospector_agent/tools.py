@@ -1602,7 +1602,11 @@ def revisar_respuestas_bandeja() -> dict:
 
     palabras_rebote = [
         "mailer-daemon", "postmaster", "undeliverable",
-        "no pudo entregarse", "delivery status notification", "returned mail"
+        "no pudo entregarse", "delivery status notification", "returned mail",
+        "mail delivery system", "message blocked", "delivery has failed",
+        "delivery failed", "wasn't found at", "no fue posible entregar",
+        "recipient address rejected", "user unknown", "access denied", "550 5",
+        "no-reply@tmes.trendmicro.com", "action required"
     ]
 
     revisados = 0

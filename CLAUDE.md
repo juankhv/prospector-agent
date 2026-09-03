@@ -350,6 +350,83 @@ Bavaria, Veolia Colombia) como prueba social general, sin necesidad de que
 coincidan con la industria exacta del prospecto. El verificador ya no
 rechaza por "caso de éxito incorrecto para la industria".
 
+## Hackathon: NO se pudo presentar (tiempo)
+
+El equipo no llegó a completar el submission de Devpost a tiempo — el
+proyecto sigue vivo y en desarrollo activo como herramienta de negocio
+real de Aptitude, pero ya NO hay ningún propósito de "jueces" o demo
+externa. La instancia `prospector-agent-demo` sigue desplegada pero SIN
+USO real — considerar en el futuro si conviene apagarla/eliminarla junto
+con el código de `DEMO_ONLY_INSTANCE` para simplificar, aunque no es
+urgente (no genera costo relevante estando inactiva). El correo real
+enviado sin protección a `juanita@activatetalent.com` (31 de agosto,
+causa nunca confirmada) y la estructura vieja de la pestaña "Demo Config"
+quedaron **descartados como prioridad** — decisión explícita del usuario,
+ya que la instancia de demo no se sigue usando.
+
+## Diagnóstico de "cero respuestas" — hallazgos del 3 de septiembre
+
+**Contexto**: después de ~46 correos enviados en varios días, el usuario
+reporta CERO respuestas reales (confirmado revisando la bandeja
+`jh@go.theaptitude.co` a diario — no es un problema de detección, no hay
+respuestas que detectar).
+
+**Hallazgo 1 — la tasa de rebote real es más alta de lo que Sheets
+mostraba**: la columna "Estado" solo tenía 5 filas marcadas "Rebotó" de
+46, pero al revisar la bandeja manualmente aparecieron varios rebotes
+reales adicionales que el sistema nunca detectó (Corporativo Kosmos, ADN
+Tigo/Tigo Paraguay, entre otros) — confirmando un segundo bug real, ver
+"Bug: detección de rebotes incompleta" abajo.
+
+**Hallazgo 2 — un contacto recibió el mismo correo DOS VECES** porque
+rebotó una vez (26-ago, sí se detectó) y el sistema, con la regla vieja
+de "3 días hábiles por empresa", lo volvió a intentar el 31-ago al MISMO
+email ya inválido (Kassandra, Caja Arequipa, `kcardenas@cajaarequipa.pe`).
+Esto ya no puede repetirse gracias al fix de `verificar_contactado_previamente`
+por email permanente (ver sección de arriba) — cualquier email que ya
+esté en "Leads Enviados" queda bloqueado para siempre, rebotado o no.
+
+**Hallazgo 3 — al menos un caso de bloqueo por política de spam, no solo
+emails inválidos**: el rebote a `julio.trevino@banregio.com` decía
+explícitamente "the user or domain... has a policy that prohibited the
+mail that you sent" — señal de que el servidor destino puede estar
+tratando los correos como spam por contenido o reputación de dominio, no
+solo por direcciones inválidas. **No investigado a fondo todavía** — si
+la tasa de rebote real (una vez corregida la detección) resulta alta,
+esto merece revisión de reputación del dominio de envío
+(`go.theaptitude.co` vía Microsoft Graph).
+
+## Bug: detección de rebotes incompleta, corregido el 3 de septiembre
+
+**Causa raíz**: `revisar_respuestas_bandeja` en `tools.py` clasifica un
+correo como rebote buscando palabras clave en
+`texto_evaluar = f"{remitente_email} {remitente_nombre} {asunto}"`. La
+lista `palabras_rebote` original (6 términos: mailer-daemon, postmaster,
+undeliverable, no pudo entregarse, delivery status notification, returned
+mail) no cubría varios formatos reales vistos en producción: "Mail
+Delivery System" (con espacio, Tigo Guatemala/trendmicro.com), "Message
+blocked" (Banregio/Tigo — señal de bloqueo por política, ver Hallazgo 3),
+notificaciones nativas de Office 365 tipo "wasn't found at" / "Action
+Required", y variantes en español como "no fue posible entregar".
+
+**Corrección aplicada**: ampliada a 18 términos, agregando: "mail delivery
+system", "message blocked", "delivery has failed", "delivery failed",
+"wasn't found at", "no fue posible entregar", "recipient address
+rejected", "user unknown", "access denied", "550 5",
+"no-reply@tmes.trendmicro.com", "action required".
+
+**Cuidado a futuro**: "action required" es genérico y PODRÍA coincidir
+con una respuesta real legítima de un prospecto (ej. si escribe "acción
+requerida de mi parte"). Monitorear — si se detectan falsos positivos
+(respuestas reales clasificadas como rebote), ese es el término más
+probable a ajustar o quitar.
+
+**Corrección manual puntual**: la fila de Tigo Paraguay
+(`earmoa@tigo.com.gt`, fila 45 de "Leads Enviados") se actualizó a mano
+a Estado="Rebotó", ya que el rebote real ya había pasado antes del fix y
+el correo ya estaba leído (fuera del alcance de la próxima revisión
+automática, que solo mira no leídos).
+
 ## Bug crítico corregido: producción ofrecía modo de prueba (28 de agosto)
 
 **Síntoma**: al abrir la URL de PRODUCCIÓN real (sin "-demo") y saludar al
