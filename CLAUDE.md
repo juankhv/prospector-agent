@@ -233,6 +233,123 @@ contactados, el agente ahora debería seguir intentando con el resto de
 la lista extra en vez de terminar el día con cero correos nuevos.
 **PENDIENTE DE CONFIRMAR** en la próxima corrida real de `prospeccion-diaria`.
 
+## Cambio de diseño importante: contacto previo ahora es por email, permanente (31 de agosto)
+
+**Problema detectado por el usuario**: la regla original (ventana de 3 días
+hábiles, chequeada por EMPRESA) permitía que la prospección diaria volviera
+a escribirle un "primer contacto" a la MISMA PERSONA que ya había recibido
+uno, simplemente porque pasaron 3+ días — mezclando indebidamente lo que
+debería ser flujo de seguimiento con lo que debería ser prospección nueva.
+Confirmado en vivo el 31 de agosto: la prospección diaria bajo demanda
+reescribió a contactos que ya habían recibido correo, sin escalar.
+
+**Corrección de diseño (decisión explícita del usuario, no revertir)**:
+- Una EMPRESA sí puede volver a contactarse — pero solo con una PERSONA
+  DISTINTA dentro de esa empresa.
+- Un CONTACTO específico (por email exacto), una vez que recibió un primer
+  correo, NUNCA vuelve a recibir otro "primer contacto" automático — le
+  corresponde el flujo de seguimiento (`buscar_leads_para_seguimiento` /
+  `redactar_seguimiento`), no la prospección nueva.
+- Ya NO hay ventana de tiempo (se eliminó la lógica de 3 días hábiles y
+  `_hace_n_dias_habiles` de esta función específica — esa función sigue
+  existiendo para otros usos, solo se dejó de usar aquí).
+
+**Cambios aplicados**:
+1. `verificar_contactado_previamente` en `tools.py`: firma cambiada de
+   `(empresa: str)` a `(email: str)`. Ahora busca la columna "Email" (no
+   "Company"/"Date"), y devuelve `ya_contactado=True` si ese email aparece
+   EN CUALQUIER FILA de "Leads Enviados"/"Sent Leads", sin importar la
+   fecha. `False` solo si el email nunca apareció.
+2. `agent.py`: la llamada ahora es `verificar_contactado_previamente(email)`
+   en todos los flujos (normal de leads nuevos, prospección diaria bajo
+   demanda). Los mensajes de escalamiento (`razon_rechazo`) ya no dicen
+   "esta empresa ya fue contactada" — dicen "este contacto ya fue
+   contactado anteriormente — requiere revisión antes de enviarle
+   seguimiento" (ES) / "this contact has already been reached out to
+   before" (EN).
+
+**Si se toca esta función en el futuro, NUNCA volver a comparar por
+empresa ni reintroducir una ventana de días — el chequeo por email,
+permanente, es la decisión de negocio correcta y ya confirmada.**
+
+## Pendientes de investigación abiertos al cierre del 31 de agosto (deadline)
+
+1. **Correo real enviado sin protección aparente** — el 31 de agosto, un
+   correo salió a `juanita@activatetalent.com` (prospecto real) mientras
+   el usuario reportaba estar usando la instancia de DEMO. No quedó
+   registrado en ninguna de las tres hojas de seguimiento (Leads Enviados
+   de producción, Pendientes de Aprobación de producción, Sent Leads de
+   demo) — se descartó que viniera del camino de "exclusión + enviar de
+   todas formas" (que sí deja rastro parcial en Pending Approval). Causa
+   raíz NO confirmada — quedó sin resolver por falta de tiempo (día límite
+   del hackathon). Hipótesis sin confirmar: el modo de prueba pudo haber
+   expirado a mitad de sesión (ver punto 2) y el sistema cayó
+   silenciosamente a destinatario real sin avisar. **Investigar con
+   prioridad después del deadline** — si se repite, hay que decidir si el
+   sistema debe RECHAZAR enviar cuando el modo de prueba expira a mitad de
+   sesión, en vez de caer silenciosamente a destinatario real.
+2. **Pestaña "Demo Config" con estructura vieja**: en la hoja de demo,
+   sigue teniendo los encabezados viejos (`Active, TestEmail, Language,
+   CompanyName, MeetingURL, ConfiguredAt`) en vez de la estructura actual
+   del código (`Active, TestEmail, Language, Country, ConfiguredAt,
+   ExpiresAt`) — nunca se recreó porque el código solo escribe encabezados
+   nuevos al CREAR la pestaña, no la actualiza si ya existía de antes.
+   Esto probablemente rompe la lógica de auto-expiración de 30 minutos
+   (`ExpiresAt` no existe en esa fila real). Posiblemente relacionado con
+   el punto 1. **Arreglar**: borrar y dejar que el código recree la
+   pestaña con la estructura nueva, o migrar manualmente los datos.
+3. **5 emails agregados a "Excluidos" en PRODUCCIÓN real como parche
+   rápido el 31 de agosto** (Banregio, Banco Ganadero S.A., Caja Arequipa,
+   Applus+, Heineken México) — se agregaron para evitar reenvíos
+   duplicados el mismo día, ANTES de que existiera el fix de
+   `verificar_contactado_previamente` por email. Como "Excluidos" es
+   permanente y bloquea también el seguimiento normal (no solo el primer
+   contacto), **considerar sacarlos de esa lista** ahora que el fix real
+   ya está desplegado, para que puedan recibir seguimiento normal si no
+   responden al primer correo.
+
+## Bug real encontrado y corregido: margen de leads no aplicaba a "prospección diaria" (1-3 de septiembre)
+
+**Síntoma**: la nueva funcionalidad de "prospección diaria bajo demanda"
+(que reparte 10 leads entre los 4 sectores, ~2-3 por sector) empezó a
+devolver muy pocos candidatos nuevos genuinos — algunos días solo
+encontraba 1-3 prospectos, todos ya excluidos o contactados, sin buscar
+más para completar la cuota de 10.
+
+**Causa raíz**: el margen extra de `buscar_leads_apollo` (agregado el 28
+de agosto para el problema similar del job de las 12pm) solo se activaba
+cuando `cantidad >= 5`. Como la prospección diaria por sector pide ~2-3
+por sector (menor a 5), el margen NUNCA se activaba para esas llamadas —
+`max_candidatos` quedaba igual a `cantidad`, sin ningún respaldo para
+descartar duplicados/excluidos.
+
+**Corrección aplicada (1 de septiembre)**: se quitó el condicional
+`if cantidad >= 5` por completo — ahora el margen aplica SIEMPRE, sin
+importar cuán chica sea la cantidad pedida:
+- `per_page = max(cantidad * 3, 15)` (antes: condicional con default 25)
+- `max_candidatos = cantidad * 2` (antes: `cantidad` sin margen si <5)
+
+**Si se vuelve a tocar esta lógica, NUNCA reintroducir un condicional que
+excluya cantidades chicas del margen — ese fue exactamente el origen de
+este bug.**
+
+## Otros dos cambios del 1 de septiembre
+
+**Filtro de cargos en Apollo ampliado**: `person_titles` en
+`buscar_leads_apollo` pasó de 5 a 18 valores — se agregaron variantes de
+gerentes de RRHH, HRBP, head of talent/people, recruiting/talent
+acquisition manager, jefe de selección/reclutamiento, en inglés y
+español, para ampliar el universo de contactos válidos por sector.
+
+**"Prueba social" simplificada en redacción**: se quitó el matching
+rígido de caso de éxito por industria (TI→Indra, banca→HSBC/Nequi,
+consumo masivo→Bavaria, utilities→Veolia) tanto en `REDACTOR_SYSTEM_PROMPT`
+como en `VERIFICADOR_SYSTEM_PROMPT` — ahora el redactor puede mencionar
+libremente cualquier combinación de los 5 clientes (Indra, HSBC, Nequi,
+Bavaria, Veolia Colombia) como prueba social general, sin necesidad de que
+coincidan con la industria exacta del prospecto. El verificador ya no
+rechaza por "caso de éxito incorrecto para la industria".
+
 ## Bug crítico corregido: producción ofrecía modo de prueba (28 de agosto)
 
 **Síntoma**: al abrir la URL de PRODUCCIÓN real (sin "-demo") y saludar al

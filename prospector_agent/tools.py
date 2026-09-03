@@ -270,12 +270,16 @@ def buscar_leads_apollo(sector: str, cantidad: int = 5, pais: str = None) -> dic
     tags = APOLLO_SECTOR_TAGS.get(sector, [sector])
     # Si cantidad >= 5 (prospección diaria), pedir el doble de resultados para tener margen
     # Si cantidad < 5 (pruebas manuales chicas), pedir el triple para asegurar suficientes candidatos
-    per_page = cantidad * 2 if cantidad >= 5 else max(cantidad * 3, 25)
+    per_page = max(cantidad * 3, 15)
     body = {
         "person_locations": person_locations,
         "person_titles": [
             "recruiter", "talent acquisition", "reclutamiento y selección",
             "coordinador de selección", "analista de selección",
+            "hr manager", "human resources manager", "gerente de recursos humanos",
+            "gerente de talento humano", "head of talent", "head of people",
+            "people manager", "recruiting manager", "talent acquisition manager",
+            "jefe de selección", "jefe de reclutamiento", "hrbp", "hr business partner",
         ],
         "organization_num_employees_ranges": [
             "1001,5000", "5001,10000", "10001,50000", "50001,1000000",
@@ -310,7 +314,7 @@ def buscar_leads_apollo(sector: str, cantidad: int = 5, pais: str = None) -> dic
         candidatos.append(p)
         # Si cantidad >= 5 (prospección diaria), recopilar todos los candidatos (cantidad * 2)
         # Si cantidad < 5 (pruebas manuales), cortar a exactamente cantidad para no devolver demasiados
-        max_candidatos = cantidad * 2 if cantidad >= 5 else cantidad
+        max_candidatos = cantidad * 2
         if len(candidatos) >= max_candidatos:
             break
 
@@ -399,13 +403,10 @@ usando "tienes"/"tú" en vez de voseo, dirigido a un profesional de RRHH/
 Talent Acquisition.
 
 Usa la investigación dada para abrir el correo de forma natural, no forzada.
-Según la industria de la empresa, menciona casos de éxito relevantes: TI →
-Indra; banca → HSBC y Nequi; consumo masivo o alimentos y bebidas → Bavaria;
-utilities → Veolia Colombia. Máximo dos casos de éxito por correo. Si la
-industria no corresponde claramente a ninguna de esas categorías, menciona
-brevemente los 5 clientes juntos (Indra, HSBC, Nequi, Bavaria, Veolia
-Colombia) como prueba social general, sin forzar una comparación directa de
-industria. No inventes cifras ni datos que no se te den.
+Menciona brevemente, como prueba social, que empresas como Indra, HSBC, Nequi,
+Bavaria y Veolia Colombia confían en Aptitude para optimizar su selección —
+sin necesidad de forzar una relación directa entre la industria del prospecto
+y cada cliente mencionado. No inventes cifras ni datos que no se te den.
 
 Cierra invitando a conversar 30 minutos de forma fluida y natural, ofreciendo
 dos opciones: responder a este correo para coordinar un horario, o agendar
@@ -420,10 +421,10 @@ Responde ÚNICAMENTE con JSON puro, sin backticks ni texto adicional:
 VERIFICADOR_SYSTEM_PROMPT = """Eres el verificador de calidad de correos de prospección B2B para
 Aptitude. Revisa un correo ya redactado y confirma que sea fiel a la
 investigación real, sin inventar ni exagerar nada. Revisa: 1) que el gancho
-de personalización corresponda a la investigación dada; 2) que el caso de
-éxito mencionado sea el correcto según la industria (TI→Indra, banca→HSBC/
-Nequi, consumo masivo→Bavaria, utilities→Veolia), o que mencione los 5
-clientes juntos si la industria no encaja en ninguna; 3) tono profesional,
+de personalización corresponda a la investigación dada; 2) que mencione,
+como prueba social, algunos de los clientes reales de Aptitude (Indra, HSBC,
+Nequi, Bavaria, Veolia Colombia) — no hace falta que coincidan específicamente
+con la industria del prospecto; 3) tono profesional,
 natural, no robótico; 4) que no exceda 120 palabras en el cuerpo; 5) que el
 dominio del email tenga alguna relación con la empresa — SÉ PERMISIVO acá:
 muchas empresas usan dominios corporativos abreviados que no contienen el
@@ -1357,19 +1358,20 @@ def verificar_lista_exclusion(email: str, empresa: str) -> dict:
         return {"excluido": False}
 
 
-def verificar_contactado_previamente(empresa: str) -> dict:
-    """Verifica si una empresa fue contactada hace menos de 3 días hábiles.
+def verificar_contactado_previamente(email: str) -> dict:
+    """Verifica si este contacto específico (por email) ya fue contactado alguna vez.
 
-    Busca TODAS las filas con esa empresa, obtiene la más reciente, y devuelve
-    ya_contactado=True solo si pasaron MENOS de 3 días hábiles desde ese contacto.
-    Si pasaron 3+ días hábiles, permite un nuevo contacto.
+    A diferencia de antes, esto ya NO tiene ventana de tiempo — si ese email ya aparece
+    en 'Leads Enviados', se considera contactado para siempre (le corresponde flujo de
+    seguimiento, no un nuevo primer contacto). La empresa en sí SÍ puede volver a
+    contactarse, pero con una persona distinta.
 
     Args:
-        empresa: Nombre de la empresa a verificar.
+        email: Email del contacto a verificar.
 
     Returns:
-        {"ya_contactado": True} si la empresa fue contactada hace <3 días hábiles,
-        {"ya_contactado": False} si no hay registros o ya pasaron 3+ días hábiles.
+        {"ya_contactado": True} si ese email ya aparece en los registros,
+        {"ya_contactado": False} si no hay registros con ese email.
     """
     credenciales_json = os.environ.get("GOOGLE_SHEETS_CREDENTIALS_JSON")
     sheet_id = os.environ.get("GOOGLE_SHEETS_ID")
@@ -1382,38 +1384,25 @@ def verificar_contactado_previamente(empresa: str) -> dict:
         gc = gspread.service_account_from_dict(credenciales_dict)
         hoja = gc.open_by_key(sheet_id).sheet1
 
-        # Obtener header para encontrar columnas de "Company" y "Date"
+        # Obtener header para encontrar columna de "Email"
         header = hoja.row_values(1)
-        if "Company" not in header or "Date" not in header:
+        if "Email" not in header:
             return {"ya_contactado": False}
 
-        col_company = header.index("Company") + 1
-        col_date = header.index("Date") + 1
+        col_email = header.index("Email") + 1
 
         # Traer todos los valores
         filas = hoja.get_all_values()
 
-        # Buscar TODAS las filas que coincidan con la empresa
-        empresa_normalizada = empresa.strip().lower()
-        fecha_mas_reciente = None
+        # Buscar si el email ya existe en la hoja
+        email_normalizado = email.strip().lower()
         for fila in filas[1:]:  # Skip header
-            if col_company <= len(fila):
-                emp = fila[col_company - 1].strip().lower()
-                if emp == empresa_normalizada:
-                    if col_date <= len(fila):
-                        fecha_str = fila[col_date - 1]
-                        if not fecha_mas_reciente or fecha_str > fecha_mas_reciente:
-                            fecha_mas_reciente = fecha_str
+            if col_email <= len(fila):
+                em = fila[col_email - 1].strip().lower()
+                if em == email_normalizado:
+                    return {"ya_contactado": True}
 
-        # Si no hay registros, permitir contacto
-        if fecha_mas_reciente is None:
-            return {"ya_contactado": False}
-
-        # Verificar si pasaron >= 3 días hábiles
-        if _hace_n_dias_habiles(fecha_mas_reciente, 3):
-            return {"ya_contactado": False}
-        else:
-            return {"ya_contactado": True}
+        return {"ya_contactado": False}
 
     except Exception:
         return {"ya_contactado": False}
