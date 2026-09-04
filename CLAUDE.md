@@ -427,6 +427,50 @@ a Estado="Rebotó", ya que el rebote real ya había pasado antes del fix y
 el correo ya estaba leído (fuera del alcance de la próxima revisión
 automática, que solo mira no leídos).
 
+## Nuevo tipo de error: 400 INVALID_ARGUMENT de Gemini, corridas interrumpidas (4 de septiembre)
+
+**Síntoma**: `prospeccion-diaria` del 4 de septiembre solo envió 2 correos
+(en vez de ~10) y quedó marcada "Con errores" en Cloud Scheduler.
+
+**Causa raíz (distinta a los timeouts anteriores)**: revisando
+`gcloud run services logs read prospector-agent`, la corrida procesó
+varios leads exitosamente (~17:01 a 17:05 UTC, varias llamadas 200 OK a
+Gemini) y luego una llamada del propio agente orquestador falló con:
+`google.genai.errors.ClientError: 400 INVALID_ARGUMENT. Request contains
+an invalid argument.` Sin más detalle específico de qué campo o contenido
+lo causó — el traceback muestra que viene del nivel de razonamiento del
+agente (`agente_prospeccion`), no de una de las funciones custom (que ya
+tienen su propio manejo de errores). Hipótesis no confirmada: contenido
+de la investigación web de un lead específico activó un filtro de
+seguridad de Gemini o tenía algún carácter/formato que rompió la
+solicitud. No se pudo identificar la empresa exacta — los logs técnicos
+no incluyen el contenido de la conversación, y el registro en Sheets se
+corta antes del lead que falló.
+
+**Efecto grave**: cuando esto pasa, TODA la corrida se detiene — no solo
+se pierde el lead problemático, se pierden todos los que venían después
+en la cola ese día, sin ningún reintento (Cloud Scheduler estaba
+configurado con `--max-retry-attempts=0`).
+
+**Corrección aplicada**: se actualizó el job `prospeccion-diaria` (no se
+recreó, se usó `gcloud scheduler jobs update`) para agregar reintento
+automático:
+```
+gcloud scheduler jobs update http prospeccion-diaria --location=us-central1 --max-retry-attempts=2 --min-backoff=60s
+```
+Ahora, si el job falla por cualquier motivo (este error de Gemini,
+timeout, o cualquier otro), Cloud Scheduler lo reintenta automáticamente
+hasta 2 veces más, esperando al menos 60s entre intentos — sin que el
+usuario tenga que darse cuenta y dispararlo manualmente. **Aplicar la
+misma configuración a los otros 4 jobs si se repite este tipo de fallo en
+ellos** (por ahora solo se aplicó a `prospeccion-diaria`, el único que
+había fallado así).
+
+**PENDIENTE DE CONFIRMAR**: si este error 400 se repite, valdría la pena
+capturar más contexto (por ejemplo, loggear qué lead/empresa se estaba
+procesando justo antes de cada llamada a Gemini) para poder diagnosticar
+la causa real en vez de solo mitigar con reintentos.
+
 ## Bug crítico corregido: producción ofrecía modo de prueba (28 de agosto)
 
 **Síntoma**: al abrir la URL de PRODUCCIÓN real (sin "-demo") y saludar al
