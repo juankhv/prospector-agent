@@ -471,6 +471,38 @@ capturar más contexto (por ejemplo, loggear qué lead/empresa se estaba
 procesando justo antes de cada llamada a Gemini) para poder diagnosticar
 la causa real en vez de solo mitigar con reintentos.
 
+## Latencia alta y ajuste del margen de leads (4 de septiembre)
+
+**Síntoma**: la corrida manual de `prospeccion-diaria` del 4 de septiembre
+completó su cuota de 10 leads con éxito, pero tardó **56 minutos** en
+total (18:06 a 19:02 UTC) — muy por encima de los 5-10 minutos típicos de
+antes, y superando el `--timeout=1800` (30 min) configurado en Cloud Run
+(el proceso siguió corriendo en background y terminó bien, pero es un
+riesgo real si algún día se corta a mitad de un envío).
+
+**Hipótesis (no confirmada con certeza total, pero coherente en tiempo)**:
+el margen de leads siempre activo (`cantidad * 2`, agregado el 1 de
+septiembre) combinado con la base creciente de contactos ya alcanzados
+(58+ leads acumulados) significa que Apollo devuelve cada vez más
+candidatos que YA están en "Leads Enviados" — el agente tiene que ir
+descartando uno por uno (cada descarte implica una ida y vuelta con
+Gemini), acumulando latencia.
+
+**Correcciones aplicadas (4 de septiembre, sin confirmar todavía si
+resuelven la latencia — monitorear próximas corridas)**:
+1. Margen de `buscar_leads_apollo` reducido de duplicar (`cantidad * 2`)
+   a un margen fijo más chico: `max_candidatos = cantidad + 3`,
+   `per_page = max(cantidad + 5, 15)` (antes `cantidad * 3`).
+2. `person_titles` simplificado drásticamente: de 18 cargos a solo 2
+   ("jefe de reclutamiento y selección", "talent acquisition manager") —
+   decisión explícita del usuario para reducir el volumen de candidatos
+   que Apollo devuelve y así acotar el trabajo de filtrado por corrida.
+
+**Si la latencia sigue siendo alta después de este cambio**, el siguiente
+paso sería subir el `--timeout` de Cloud Run (a 3600s o más) como red de
+seguridad, independientemente de si se resuelve la causa raíz — no
+aplicado todavía, se prefirió atacar la causa primero.
+
 ## Bug crítico corregido: producción ofrecía modo de prueba (28 de agosto)
 
 **Síntoma**: al abrir la URL de PRODUCCIÓN real (sin "-demo") y saludar al

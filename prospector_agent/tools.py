@@ -270,16 +270,11 @@ def buscar_leads_apollo(sector: str, cantidad: int = 5, pais: str = None) -> dic
     tags = APOLLO_SECTOR_TAGS.get(sector, [sector])
     # Si cantidad >= 5 (prospección diaria), pedir el doble de resultados para tener margen
     # Si cantidad < 5 (pruebas manuales chicas), pedir el triple para asegurar suficientes candidatos
-    per_page = max(cantidad * 3, 15)
+    per_page = max(cantidad + 5, 15)
     body = {
         "person_locations": person_locations,
         "person_titles": [
-            "recruiter", "talent acquisition", "reclutamiento y selección",
-            "coordinador de selección", "analista de selección",
-            "hr manager", "human resources manager", "gerente de recursos humanos",
-            "gerente de talento humano", "head of talent", "head of people",
-            "people manager", "recruiting manager", "talent acquisition manager",
-            "jefe de selección", "jefe de reclutamiento", "hrbp", "hr business partner",
+            "jefe de reclutamiento y selección", "talent acquisition manager",
         ],
         "organization_num_employees_ranges": [
             "1001,5000", "5001,10000", "10001,50000", "50001,1000000",
@@ -314,7 +309,7 @@ def buscar_leads_apollo(sector: str, cantidad: int = 5, pais: str = None) -> dic
         candidatos.append(p)
         # Si cantidad >= 5 (prospección diaria), recopilar todos los candidatos (cantidad * 2)
         # Si cantidad < 5 (pruebas manuales), cortar a exactamente cantidad para no devolver demasiados
-        max_candidatos = cantidad * 2
+        max_candidatos = cantidad + 3
         if len(candidatos) >= max_candidatos:
             break
 
