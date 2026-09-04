@@ -503,6 +503,34 @@ paso sería subir el `--timeout` de Cloud Run (a 3600s o más) como red de
 seguridad, independientemente de si se resuelve la causa raíz — no
 aplicado todavía, se prefirió atacar la causa primero.
 
+## Verificación de un solo intento, sin reintento de redacción (4 de septiembre)
+
+**Cambio de diseño explícito del usuario, para reducir latencia por lead**:
+el límite de reintentos del Verificador bajó de 2 intentos (25-ago) a
+**1 solo intento, sin reintento** — cualquier rechazo del Verificador
+ahora escala DIRECTO a "Pendientes de Aprobación", sin que el agente
+vuelva a llamar a `redactar_correo` con feedback para corregir.
+
+**Efecto en el flujo**: el paso que antes decía "si NO fue aprobado y
+llevás menos de N intentos, volvé a redactar" se ELIMINÓ por completo del
+flujo normal de leads nuevos — ya no existe ningún camino de reintento de
+redacción en `agent.py`. Los pasos se renumeraron (el antiguo paso 6 pasó
+a ser 5, el antiguo paso 7 pasó a ser 6). Mismo ajuste aplicado al flujo
+de reintento de rechazados semanales y al flujo de seguimiento — todos
+ahora son de verificación única, sin reintento.
+
+**Costo de este cambio**: más correos van a terminar en revisión manual
+("Pending Approval") en vez de corregirse solos y enviarse — el usuario
+aceptó explícitamente este trade-off (menos automatización total, pero
+significativamente menos latencia por lead, ya que cada rechazo ya no
+cuesta una ronda extra completa de redacción+verificación con Gemini).
+
+**Si se vuelve a tocar este límite en el futuro**, verificar las 9+
+ubicaciones en `agent.py` que mencionan el número de intentos — no
+todas las menciones de "2 veces" se referían a esto: la de "seguimiento
+hasta 2 veces más" es un concepto DISTINTO (secuencia de follow-up, no
+límite del Verificador) y debe quedar intacta.
+
 ## Bug crítico corregido: producción ofrecía modo de prueba (28 de agosto)
 
 **Síntoma**: al abrir la URL de PRODUCCIÓN real (sin "-demo") y saludar al
