@@ -531,6 +531,83 @@ todas las menciones de "2 veces" se referían a esto: la de "seguimiento
 hasta 2 veces más" es un concepto DISTINTO (secuencia de follow-up, no
 límite del Verificador) y debe quedar intacta.
 
+## Error de cuota de Gemini (429 RESOURCE_EXHAUSTED) y reintento agresivo contraproducente (7 de septiembre)
+
+**Síntoma**: `prospeccion-diaria` del 7 de septiembre envió 16 correos en
+vez de 10, y Cloud Scheduler mostró 3 arranques distintos (17:00, 17:10,
+17:13) para el mismo job.
+
+**Causa raíz real, distinta a todo lo anterior**: `google.genai.errors.ClientError:
+429 RESOURCE_EXHAUSTED` — límite de cuota de la API de Gemini/Vertex AI
+alcanzado a mitad de la corrida. El reintento automático que se había
+configurado el 4 de septiembre (`--max-retry-attempts=2` en Cloud
+Scheduler) resultó CONTRAPRODUCENTE para este tipo de error específico:
+cada reintento volvía a arrancar la prospección desde cero (sin memoria
+de cuántos leads ya se habían enviado ese día), así que los 3 intentos
+sumados mandaron más correos de los 10 esperados — no duplicados al mismo
+contacto (protegido por el chequeo permanente por email), pero sí más
+volumen del previsto para el día.
+
+**Correcciones aplicadas (7 de septiembre)**:
+1. Revertido el reintento agresivo de Cloud Scheduler para
+   `prospeccion-diaria`: `gcloud scheduler jobs update http
+   prospeccion-diaria --location=us-central1 --max-retry-attempts=0`.
+   Reintentar automáticamente NO ayuda cuando la causa es agotamiento de
+   cuota (la cuota tarda en resetear, no en 60s) — solo empeora el
+   consumo. Si el job falla, ahora hay que dispararlo manualmente.
+2. **Corrección de raíz en el código**: `_generar_json_con_gemini` en
+   `tools.py` (la función central que usan `redactar_correo`,
+   `redactar_seguimiento`, `verificar_correo`, y la clasificación de
+   respuestas) ahora reintenta automáticamente HASTA 3 VECES, pero SOLO
+   cuando el error contiene "429" o "RESOURCE_EXHAUSTED" — con esperas
+   progresivas (10s, luego 20s) entre intentos. Cualquier otro tipo de
+   error sigue fallando de inmediato, sin reintento, como antes. Esto
+   protege la llamada puntual que falló, sin reiniciar toda la corrida
+   desde cero como hacía el reintento de Cloud Scheduler.
+
+**Nota para el futuro**: si el 429 se sigue repitiendo con frecuencia
+después de este fix, el siguiente paso sería solicitar un aumento de
+cuota real en la consola de Google Cloud (IAM y administración → Cuotas y
+límites del sistema, filtrar por "gemini-3.5-flash") — no se identificó
+con certeza el límite exacto que se estaba tocando, la variante base
+"gemini-3.5-flash" sin sufijo no apareció desglosada en la consola
+(probablemente cuota compartida por defecto, no una fila individual).
+
+## Corrección de ambigüedad en la investigación web: nombres de empresa que coinciden con otras entidades (7 de septiembre)
+
+**Bug real encontrado por el usuario**: un correo real enviado a
+`mfrancom@liverpool.com.mx` (Liverpool, la cadena mexicana de tiendas
+departamentales) habló del "Puerto de Liverpool" — la investigación web
+(`google_search_agent`) trajo información sobre la ciudad/puerto de
+Liverpool, Inglaterra, en vez de la empresa real, porque la consulta
+original no tenía ningún ancla que desambiguara el nombre.
+
+**Corrección aplicada**: el paso 2 del flujo normal en `agent.py` ahora
+instruye al agente a construir la consulta de búsqueda usando el DOMINIO
+del email del contacto como ancla explícita (ej. "noticias recientes y
+vacantes de RRHH de la empresa con sitio web liverpool.com.mx, sector
+[industria]"), en vez de solo el nombre de la empresa a secas. También se
+agregó la instrucción explícita de usar un gancho genérico honesto si el
+resultado de la búsqueda no deja claro que corresponde a la empresa
+correcta, en vez de arriesgarse a mezclar información de una entidad
+distinta (ciudad, lugar geográfico, equipo deportivo, etc. que comparta
+el mismo nombre).
+
+**Si se repite este tipo de error con otro nombre ambiguo**, el patrón de
+corrección es el mismo: reforzar el ancla de búsqueda con datos objetivos
+disponibles (dominio del email, o el país/industria ya conocidos), no solo
+confiar en que el modelo infiera correctamente el contexto solo del
+nombre.
+
+## Reducción de pasos redundantes por lead (Opción B), 4 de septiembre — repaso
+
+(Ya documentado arriba: verificación de un solo intento sin reintento de
+redacción, margen de leads reducido, cargos de Apollo simplificados a 2.
+Estos 3 cambios buscan reducir la latencia total de una corrida de 10
+leads, que había llegado a tomar 56 minutos. Pendiente de confirmar el
+efecto combinado en las próximas corridas reales — no se ha vuelto a medir
+la duración total desde que se aplicaron los tres juntos.)
+
 ## Bug crítico corregido: producción ofrecía modo de prueba (28 de agosto)
 
 **Síntoma**: al abrir la URL de PRODUCCIÓN real (sin "-demo") y saludar al

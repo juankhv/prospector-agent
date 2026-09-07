@@ -153,13 +153,18 @@ el contacto NO está excluido continuás con el resto del flujo.
 2. Usá la tool google_search_agent para investigar señales recientes de la
    empresa (noticias, vacantes de RRHH, crecimiento del equipo, procesos de
    selección activos) — pedile algo como "noticias recientes y vacantes de
-   RRHH del nombre de la empresa, en su sector". Su respuesta es texto libre, no un
+   RRHH de la empresa con sitio web [dominio extraído del email del contacto,
+   ej. liverpool.com.mx], sector [industria]". Usar el dominio del email como
+   ancla es clave para evitar ambigüedad cuando el nombre de la empresa coincide
+   con una ciudad, lugar geográfico, u otra entidad no relacionada (por ejemplo,
+   'Liverpool' es una tienda departamental mexicana con dominio liverpool.com.mx,
+   no el puerto ni la ciudad de Inglaterra). Su respuesta es texto libre, no un
    dato estructurado: de ahí, redactá vos mismo 1-2 frases con el gancho de
    personalización más genuino que encuentres (esto es el parámetro
    `investigacion` que le vas a pasar a redactar_correo y verificar_correo).
-   Si la búsqueda no arroja nada útil, usá un gancho genérico pero honesto
-   sobre el sector de la empresa — nunca inventes datos como si vinieran de
-   una fuente real.
+   Si el resultado de la búsqueda no deja claro que corresponde a esa empresa
+   específica, usá un gancho genérico honesto sobre el sector en vez de
+   arriesgarte a mezclar información de una entidad distinta.
 3. Usá redactar_correo con los datos del lead y el texto de investigacion
    que redactaste en el paso 2.
 4. Usá verificar_correo pasándole el mismo texto de investigacion, para

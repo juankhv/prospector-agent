@@ -10,6 +10,7 @@ import os
 import re
 import json
 import html
+import time
 from datetime import datetime, timezone, timedelta
 
 import requests
@@ -440,21 +441,42 @@ apruebas, string vacío"}"""
 def _generar_json_con_gemini(system_prompt: str, user_content: str) -> tuple:
     """Helper interno: llama a Gemini y parsea la respuesta como JSON.
 
+    Reintenta automáticamente hasta 3 veces si el error es de cuota (429 RESOURCE_EXHAUSTED),
+    con esperas progresivas entre intentos (10s, 20s). Si el error no es de cuota, falla inmediatamente.
+
     Returns:
         (dict_parseado, None) en éxito, o (None, mensaje_de_error) en falla.
     """
-    try:
-        from google import genai
-        client = genai.Client()
-        modelo = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash")
-        respuesta = client.models.generate_content(
-            model=modelo,
-            contents=f"{system_prompt}\n\n---\n\n{user_content}",
-            config={"response_mime_type": "application/json"},
-        )
-        return json.loads(respuesta.text), None
-    except Exception as e:
-        return None, str(e)
+    max_intentos = 3
+    esperas = [10, 20]  # segundos entre intentos
+
+    for intento in range(max_intentos):
+        try:
+            from google import genai
+            client = genai.Client()
+            modelo = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash")
+            respuesta = client.models.generate_content(
+                model=modelo,
+                contents=f"{system_prompt}\n\n---\n\n{user_content}",
+                config={"response_mime_type": "application/json"},
+            )
+            return json.loads(respuesta.text), None
+        except Exception as e:
+            error_str = str(e)
+            es_cuota = "429" in error_str or "RESOURCE_EXHAUSTED" in error_str
+
+            # Si NO es error de cuota, fallar inmediatamente
+            if not es_cuota:
+                return None, error_str
+
+            # Si es cuota y quedan intentos, esperar y reintentar
+            if intento < max_intentos - 1:
+                espera = esperas[intento]
+                time.sleep(espera)
+                continue
+
+            # Agotados los 3 intentos
+            return None, error_str
 
 
 def redactar_correo(nombre_destinatario: str, cargo: str, empresa: str,
